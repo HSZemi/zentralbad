@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Bürgerentscheid »Kurfürstenbad bleibt!« vom 21. April 2017</title>
+<link rel="stylesheet" href="css/leaflet.css" />
+<style>
+body{margin: 0; padding: 0;}
+.leaflet-container{
+font-size: 16pt;
+}
+.leaflet-container h4{
+margin: 0;
+padding: 0;
+}
+#mapid {width: 100%; height: 100vh;}
+.legend  {
+	width: 100%;
+	text-align: center;
+	padding: 0.5em;
+	background-color: white;
+}
+.legend.ja {
+	background-color: #ff0;
+	color: black;
+	font-weight: bold;
+}
+.legend.nein {
+	background-color: #00f;
+	color: white;
+	font-weight: bold;
+}
+.legend.hoch {
+	background-color: #f00;
+	color: black;
+	font-weight: bold;
+}
+.legend.niedrig {
+	background-color: #fff;
+	color: black;
+	font-weight: bold;
+}
+button.legend {
+	display: block;
+	width: 100%;
+}
+.titlebar{background-color: rgba(255,255,255,0.5); padding: 0.5em;border-radius: 3px;}
+.titlebar h1{ margin: 0em; color: #333;font-size: 12pt;}
+</style>
+</head>
+<body>
+ <div id="mapid"></div>
+<script src="js/jquery-3.2.1.min.js"></script>
+<script src="js/leaflet.js"></script>
+<script>
+
+var data_geojson, data_be, data_baeder;
+var mymap, jaNeinLayer, beteiligungsLayer;
+
+var state = {"janein_visible":false,"beteiligung_visible":true};
+
+data_baeder = [
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Frankenbad",
+        "popupContent": "Frankenbad"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.088300,50.739148]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Römerbad",
+        "popupContent": "Römerbad"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.097587,50.753851]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Schwimmbad in Sportpark Nord",
+        "popupContent": "Schwimmbad in Sportpark Nord"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.084219,50.746510]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Beueler Bütt",
+        "popupContent": "Beueler Bütt"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.123983,50.737125]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Melbbad",
+        "popupContent": "Melbbad"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.088065,50.715247]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Panoramabad",
+        "popupContent": "Panoramabad"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.176653,50.680650]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Freibad Friesdorf",
+        "popupContent": "Freibad Friesdorf"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.124887,50.697433]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Kurfürstenbad",
+        "popupContent": "Kurfürstenbad"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.154407, 50.679373]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Hardtbergbad",
+        "popupContent": "Hardtbergbad"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.044003,50.705832]
+    }
+},
+{
+    "type": "Feature",
+    "properties": {
+        "name": "Heizkraftwerk Süd",
+        "popupContent": "Heizkraftwerk Süd"
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [7.120864, 50.710287]
+    }
+}
+];
+
+function onEachBadFeature(feature, layer) {
+	var popupContent = "";
+
+	if (feature.properties && feature.properties.popupContent) {
+		popupContent += feature.properties.popupContent;
+	}
+
+	layer.bindPopup(popupContent);
+}
+
+function onEachBezirkFeature(feature, layer) {
+	var wbdata = data_be[feature.properties.wahlbezirk_nr];
+	
+	let ja = "Ja";
+	let nein = "Nein";
+	
+	if(wbdata.Ja > wbdata.Nein){
+		ja = "<b>Ja</b>";
+	} else {
+		nein = "<b>Nein</b>";
+	}
+	
+	var popupContent = "<h4>"+wbdata.Name+"</h4><p>"+ja+" "+wbdata.Ja_Proz+" %<br>"+nein+" "+wbdata.Nein_Proz+" %<br>Wahlbeteiligung: "+wbdata.Wahlbeteiligung+" %</p>";
+
+	layer.bindPopup(popupContent);
+}
+
+$.when(
+	$.getJSON('json/geojson.json',function(data){
+		data_geojson = data;
+	}),
+	
+	$.getJSON('json/Buergerentscheid_NRW385.csv.json',function(data){
+		data_be = data;
+	})
+	
+).then(function(){
+	mymap = L.map('mapid').setView([50.7, 7.1], 12);
+	L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.{ext}', {
+	attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+	subdomains: 'abcd',
+	minZoom: 1,
+	maxZoom: 16,
+	ext: 'png'
+	}).addTo(mymap);
+	
+	var legend = L.control({position: 'topright'});
+	legend.onAdd = function (map) {
+		var div = L.DomUtil.create('div', 'controls');
+		div.innerHTML += '<button id="toggle_janein" class="legend" onclick="toggle(\'janein_visible\')">Ja/Nein anzeigen</button><div class="legend ja">Ja</div><div class="legend nein">Nein</div><button id="toggle_beteiligung" class="legend" onclick="toggle(\'beteiligung_visible\')">Beteiligung anzeigen</button><div class="legend hoch">60 %</div><div class="legend niedrig">20 %</div><div></div>';
+
+		return div;
+	};
+
+	legend.addTo(mymap);
+	
+	
+	var titlebar = L.control({position: 'bottomleft'});
+	titlebar.onAdd = function (map) {
+		var div = L.DomUtil.create('div', 'titlebar');
+		div.innerHTML += '<h1>Bürgerentscheid »Kurfürstenbad bleibt« vom 21. April 2017</h1>';
+
+		return div;
+	};
+
+	titlebar.addTo(mymap);
+	
+	
+	var jaNeinStyle = function(feature) {
+		wbdata = data_be[feature.properties.wahlbezirk_nr];
+		
+		var r,g,b;
+		r = Math.floor(255 * (wbdata.Ja / (wbdata.Ja + wbdata.Nein)));
+		g = Math.floor(255 * (wbdata.Ja / (wbdata.Ja + wbdata.Nein)));
+		b = Math.floor(255 * (wbdata.Nein / (wbdata.Ja + wbdata.Nein)));
+        
+		return {
+			"color": "rgb("+r+","+g+","+b+")",
+			"weight": 3,
+			"opacity": 1,
+			"fillOpacity":0.8
+		};
+	};
+
+	jaNeinLayer = L.geoJSON(data_geojson, {
+		style: jaNeinStyle,
+		onEachFeature: onEachBezirkFeature
+	}).addTo(mymap);
+	
+	var beteiligungStyle = function(feature) {
+		wbdata = data_be[feature.properties.wahlbezirk_nr];
+		
+		let wb = parseFloat(wbdata.Wahlbeteiligung);
+		wb_stretch = (wb - 20) / (60 - 20);
+		
+		var r,g,b;
+		r = 255
+		g = 255-Math.floor(wb_stretch * 255);
+		b = 255-Math.floor(wb_stretch * 255);;
+        
+		return {
+			"color": "rgb("+r+","+g+","+b+")",
+			"weight": 3,
+			"opacity": 1,
+			"fillOpacity":0.8
+		};
+	};
+
+	beteiligungsLayer = L.geoJSON(data_geojson, {
+		style: beteiligungStyle,
+		onEachFeature: onEachBezirkFeature
+	}).addTo(mymap);
+	
+	var freibaeder = L.geoJSON(data_baeder, {onEachFeature: onEachBadFeature}).addTo(mymap);
+	toggle('janein_visible');
+	}
+	
+);
+
+function toggle(key){
+	$.each(state, function(k,v){
+		if(k != key){
+			state[k] = false;
+		} else {
+			state[k] = true;
+		}
+	});
+	
+	mymap.removeLayer(beteiligungsLayer);
+	mymap.removeLayer(jaNeinLayer);
+	
+	if(state["beteiligung_visible"]){
+		mymap.addLayer(beteiligungsLayer);
+	}
+	if(state["janein_visible"]){
+		mymap.addLayer(jaNeinLayer);
+	}
+}
+
+
+
+
+</script>
+</body>
+</html>
